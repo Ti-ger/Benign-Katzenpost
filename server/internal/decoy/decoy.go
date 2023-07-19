@@ -209,6 +209,7 @@ func (d *decoy) sendDecoyPacket(ent *pkicache.Entry) {
 		// happen eventually though.
 		panic("BUG: Provider generated decoy traffic not supported yet")
 	}
+	return
 	doc := ent.Document()
 
 	// TODO: The path selection maybe should be more strategic/systematic

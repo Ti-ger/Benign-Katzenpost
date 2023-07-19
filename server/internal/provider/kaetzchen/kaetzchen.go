@@ -107,6 +107,11 @@ func (k *KaetzchenWorker) IsKaetzchen(recipient [sConstants.RecipientIDLength]by
 	return ok
 }
 
+func (k *KaetzchenWorker) WhichKaetzchen(recipient [sConstants.RecipientIDLength]byte) Kaetzchen {
+	kaetzchen, _ := k.kaetzchen[recipient]
+	return kaetzchen
+}
+
 func (k *KaetzchenWorker) registerKaetzchen(service Kaetzchen) error {
 	capa := service.Capability()
 
@@ -206,7 +211,8 @@ func (k *KaetzchenWorker) processKaetzchen(pkt *packet.Packet) {
 		instrument.KaetzchenRequestsDropped(k.getDropCounter())
 		return
 	}
-
+	k.log.Debug("This message is for recipient: %s", pkt.Recipient.ID)
+	k.log.Debug("Contains surb: %s", surb)
 	resp, err = dst.OnRequest(pkt.ID, payload, surb != nil)
 
 	switch {

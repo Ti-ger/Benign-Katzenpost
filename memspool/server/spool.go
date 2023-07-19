@@ -25,6 +25,7 @@ import (
 	"time"
 
 	sha512 "crypto/sha512"
+
 	"github.com/katzenpost/katzenpost/core/crypto/eddsa"
 	"github.com/katzenpost/katzenpost/core/worker"
 	"github.com/katzenpost/katzenpost/memspool/common"
@@ -318,6 +319,7 @@ func (m *MemSpoolMap) AppendToSpool(spoolID [common.SpoolIDSize]byte, message []
 		m.log.Debug("invalid spool found")
 		return errors.New("invalid spool found")
 	}
+	m.log.Debugf("Appending Message: %s to spool  ID: %i", string(message), spoolID)
 	spool.Append(message)
 	return nil
 }

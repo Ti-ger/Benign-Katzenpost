@@ -21,6 +21,7 @@ package boltspool
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 
 	sConstants "github.com/katzenpost/katzenpost/core/sphinx/constants"
 	"github.com/katzenpost/katzenpost/server/spool"
@@ -44,14 +45,15 @@ func (s *boltSpool) Close() {
 }
 
 func (s *boltSpool) StoreMessage(u, msg []byte) error {
+	log.Println("Store message for: %v", u)
 	return s.doStore(u, nil, msg)
 }
 
 func (s *boltSpool) StoreSURBReply(u []byte, id *[sConstants.SURBIDLength]byte, msg []byte) error {
+	log.Println("DO Storing surb reply for: %s", string(u))
 	if id == nil {
 		return fmt.Errorf("spool: SURBReply is missing ID")
 	}
-
 	return s.doStore(u, id, msg)
 }
 

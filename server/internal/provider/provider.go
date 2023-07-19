@@ -20,6 +20,7 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -201,11 +202,14 @@ func (p *provider) worker() {
 			continue
 		}
 
+		p.log.Debugf("Processing packet: %v for recipient: %s is for user: %b", pkt.ID, pkt.Recipient.ID, pkt.IsToUser())
 		// Kaetzchen endpoints are published in the PKI and are never
 		// user-facing, so omit the recipient-post processing.  If clients
 		// are written under the assumption that Kaetzchen addresses are
 		// normalized, that's their problem.
+
 		if p.kaetzchenWorker.IsKaetzchen(pkt.Recipient.ID) {
+			p.log.Debug("Is kaetzchen")
 			// Packet is destined for a Kaetzchen auto-responder agent, and
 			// can't be a SURB-Reply.
 			if pkt.IsSURBReply() {
@@ -221,6 +225,7 @@ func (p *provider) worker() {
 		}
 
 		if p.cborPluginKaetzchenWorker.IsKaetzchen(pkt.Recipient.ID) {
+			p.log.Debug("Is cbor kaetzchen")
 			if pkt.IsSURBReply() {
 				p.log.Debugf("Dropping packet: %v (SURB-Reply for Kaetzchen)", pkt.ID)
 				instrument.PacketsDropped()
@@ -235,6 +240,7 @@ func (p *provider) worker() {
 
 		// Post-process the recipient.
 		recipient := pkt.Recipient.ID[:]
+		p.log.Debugf("Post-process recipient: %v", recipient)
 
 		// Ensure the packet is for a valid recipient.
 		if !p.userDB.Exists(recipient) {
@@ -244,12 +250,19 @@ func (p *provider) worker() {
 			continue
 		}
 
+		p.log.Debugf("recipient: %v exists", recipient)
 		// Process the packet based on type.
 		if pkt.IsSURBReply() {
+			p.log.Debug("Is surb reply")
+			p.log.Debugf("Surb REPLY recipient: %v", recipient)
 			p.onSURBReply(pkt, recipient)
 		} else {
+			p.log.Debugf("USER MESSAGE recipient: %v", recipient)
+			p.log.Debug("Is user message")
 			// Caller checks that the packet is either a SURB-Reply or a user
 			// message, so this must be the latter.
+			log.Println("ON TO USER!")
+			p.log.Debugf("ON TO USER")
 			p.onToUser(pkt, recipient)
 		}
 
@@ -264,6 +277,7 @@ func (p *provider) onSURBReply(pkt *packet.Packet, recipient []byte) {
 		return
 	}
 
+	p.glue.Maligne().OnSURBReply(recipient, &pkt.SurbReply.ID)
 	// Store the payload in the spool.
 	if err := p.spool.StoreSURBReply(recipient, &pkt.SurbReply.ID, pkt.Payload); err != nil {
 		p.log.Debugf("Failed to store SURB-Reply: %v (%v)", pkt.ID, err)
@@ -279,6 +293,7 @@ func (p *provider) onToUser(pkt *packet.Packet, recipient []byte) {
 		instrument.PacketsDropped()
 		return
 	}
+	p.log.Debugf("TRACK Received message for: %s", string(recipient))
 
 	// Store the ciphertext in the spool.
 	if err := p.spool.StoreMessage(recipient, ct); err != nil {
@@ -294,7 +309,7 @@ func (p *provider) onToUser(pkt *packet.Packet, recipient []byte) {
 			return
 		}
 
-		p.log.Debugf("Handing off newly generated SURB-ACK: %v (Src:%v)", ackPkt.ID, pkt.ID)
+		p.log.Debugf("TRACK Handing off newly generated SURB-ACK: %v (Src:%v)", ackPkt.ID, pkt.ID)
 		p.glue.Scheduler().OnPacket(ackPkt)
 	} else {
 		p.log.Debugf("Stored Message: %v (No SURB)", pkt.ID)
@@ -329,6 +344,7 @@ func (p *provider) doAddUpdate(c *thwack.Conn, l string, isUpdate bool) error {
 
 	// Attempt to add or update the user.
 	u := []byte(sp[1])
+	p.log.Debugf("TRACKME Add or update for User: %v with pubkey: %v", u, pubKey)
 	if err = p.userDB.Add(u, pubKey, isUpdate); err != nil {
 		c.Log().Errorf("Failed to add/update user: %v", err)
 		return c.WriteReply(thwack.StatusTransactionFailed)
@@ -348,6 +364,7 @@ func (p *provider) onRemoveUser(c *thwack.Conn, l string) error {
 	}
 
 	u := []byte(sp[1])
+	p.log.Debugf("TRACKME Remove User: %v with pubkey: %v", u)
 	// Remove the user from the UserDB.
 	if err := p.userDB.Remove(u); err != nil {
 		c.Log().Errorf("Failed to remove user '%v': %v", u, err)
@@ -377,6 +394,7 @@ func (p *provider) onRemoveUserIdentity(c *thwack.Conn, l string) error {
 	}
 
 	u := []byte(sp[1])
+	p.log.Debugf("TRACKME Remove User Identity: %v with pubkey: %v", u)
 	if err := p.userDB.SetIdentity(u, nil); err != nil {
 		c.Log().Errorf("Failed to set identity for user '%v': %v", u, err)
 		return c.WriteReply(thwack.StatusTransactionFailed)
@@ -408,6 +426,7 @@ func (p *provider) onSetUserIdentity(c *thwack.Conn, l string) error {
 	}
 
 	u := []byte(sp[1])
+	p.log.Debugf("TRACKME Set identity for User: %v with pubkey: %v", u, pubKey)
 	if err = p.userDB.SetIdentity(u, pubKey); err != nil {
 		c.Log().Errorf("Failed to set identity for user '%v': %v", u, err)
 		return c.WriteReply(thwack.StatusTransactionFailed)
@@ -427,6 +446,7 @@ func (p *provider) onUserLink(c *thwack.Conn, l string) error {
 	}
 
 	u := []byte(sp[1])
+	p.log.Debugf("TRACKME On User link User: %v with pubkey: %v", u)
 	pubKey, err := p.userDB.Link(u)
 	if err != nil {
 		c.Log().Errorf("Failed to query link key for user '%s': %v", string(u), err)
@@ -447,6 +467,7 @@ func (p *provider) onUserIdentity(c *thwack.Conn, l string) error {
 	}
 
 	u := []byte(sp[1])
+	p.log.Debugf("TRACKME On User Identity for User: %v with pubkey: %v", u)
 	pubKey, err := p.userDB.Identity(u)
 	if err != nil {
 		c.Log().Errorf("Failed to query identity for user '%v': %v", u, err)

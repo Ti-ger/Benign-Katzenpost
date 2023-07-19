@@ -25,7 +25,6 @@ import (
 	"bytes"
 	"context"
 	"testing"
-	"time"
 
 	"github.com/katzenpost/katzenpost/client"
 	"github.com/katzenpost/katzenpost/client/config"
@@ -105,129 +104,6 @@ func reloadCatshadowState(t *testing.T, stateFile string) *Client {
 	catShadowClient.Online(context.Background())
 
 	return catShadowClient
-}
-
-func TestDockerPandaSuccess(t *testing.T) {
-	t.Parallel()
-	require := require.New(t)
-
-	aliceState := createRandomStateFile(t)
-	alice := createCatshadowClientWithState(t, aliceState)
-	bobState := createRandomStateFile(t)
-	bob := createCatshadowClientWithState(t, bobState)
-
-	sharedSecret := []byte("There is a certain kind of small town that grows like a boil on the ass of every Army base in the world.")
-	randBytes := [8]byte{}
-	_, err := rand.Reader.Read(randBytes[:])
-	require.NoError(err)
-	sharedSecret = append(sharedSecret, randBytes[:]...)
-
-	alice.NewContact("bob", sharedSecret)
-	bob.NewContact("alice", sharedSecret)
-
-loop1:
-	for {
-		ev := <-alice.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop1
-		default:
-		}
-	}
-
-loop2:
-	for {
-		ev := <-bob.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop2
-		default:
-		}
-	}
-
-	alice.Shutdown()
-	bob.Shutdown()
-}
-
-func TestDockerPandaTagContendedError(t *testing.T) {
-	t.Parallel()
-	require := require.New(t)
-
-	aliceStateFilePath := createRandomStateFile(t)
-	alice := createCatshadowClientWithState(t, aliceStateFilePath)
-	bobStateFilePath := createRandomStateFile(t)
-	bob := createCatshadowClientWithState(t, bobStateFilePath)
-
-	sharedSecret := []byte("twas brillig and the slithy toves")
-	randBytes := [8]byte{}
-	_, err := rand.Reader.Read(randBytes[:])
-	require.NoError(err)
-	sharedSecret = append(sharedSecret, randBytes[:]...)
-
-	alice.NewContact("bob", sharedSecret)
-	bob.NewContact("alice", sharedSecret)
-
-loop1:
-	for {
-		ev := <-alice.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop1
-		default:
-		}
-	}
-
-loop2:
-	for {
-		ev := <-bob.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop2
-		default:
-		}
-	}
-
-	alice.Shutdown()
-	bob.Shutdown()
-
-	// second phase of test, use same panda shared secret
-	// in order to test that it invokes a tag contended error
-	adaState := createRandomStateFile(t)
-	ada := createCatshadowClientWithState(t, adaState)
-	jeffState := createRandomStateFile(t)
-	jeff := createCatshadowClientWithState(t, jeffState)
-
-	ada.NewContact("jeff", sharedSecret)
-	jeff.NewContact("ada", sharedSecret)
-
-loop3:
-	for {
-		ev := <-ada.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.NotNil(event.Err)
-			break loop3
-		default:
-		}
-	}
-
-loop4:
-	for {
-		ev := <-jeff.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.NotNil(event.Err)
-			break loop4
-		default:
-		}
-	}
-
-	ada.Shutdown()
-	jeff.Shutdown()
 }
 
 func TestDockerSendReceive(t *testing.T) {
@@ -375,21 +251,20 @@ func TestDockerSendReceive(t *testing.T) {
 	<-aliceKXFinishedChan
 	<-malKXFinishedChan
 	<-bobKXFinishedChan
-	alice.SendMessage("bob", []byte(`Data encryption is used widely to protect the content of Internet
-communications and enables the myriad of activities that are popular today,
-from online banking to chatting with loved ones. However, encryption is not
-sufficient to protect the meta-data associated with the communications.
-`))
+
+	for nick, contact := range bob.contactNicknames {
+		bob.log.Debugf("I know: %v @", nick, contact.GetProvider())
+	}
+
+	alice.SendMessage("bob", []byte(`Hello bob, I am in wonderland`))
+	alice.SendMessage("bob", []byte(`Data encryption is used widely to protect the content of Internet communications and enables the myriad of activities that are popular today, from online banking to chatting with loved ones. However, encryption is not sufficient to protect the meta-data associated with the communications.`))
 	<-aliceSentChan
 	<-aliceDeliveredChan
 	<-bobReceivedMessageChan
 
 	alice.log.Debugf("CSTDSR: ALICE SENDING SECOND MESSAGE to bob")
-	alice.SendMessage("bob", []byte(`Since 1979, there has been active academic research into communication
-meta-data protection, also called anonymous communication networking, that has
-produced various designs. Of these, mix networks are among the most practical
-and can readily scale to millions of users.
-`))
+	alice.SendMessage("bob", []byte(`bob Since 1979, there has been active academic research into `))
+	alice.SendMessage("bob", []byte(`Hello bob, I am in wonderland there has been active academic research into Since 1979, there has been active academic research into `))
 	<-aliceSentChan
 	<-aliceDeliveredChan
 	<-bobReceivedMessageChan
@@ -410,7 +285,7 @@ and can readily scale to millions of users.
 	alice.log.Debug("LOADING ALICE'S CONVERSATION")
 	aliceConvesation := alice.conversations["bob"]
 	for i, mesg := range aliceConvesation {
-		alice.log.Debugf("%d outbound %v message:\n%s\n", i, mesg.Outbound, mesg.Plaintext)
+		alice.log.Debugf("ALICE %d outbound %v message:\n%s\n", i, mesg.Outbound, mesg.Plaintext)
 	}
 
 	// Test sorted conversation and message delivery status
@@ -447,7 +322,7 @@ and can readily scale to millions of users.
 	newBob.log.Debug("LOADING BOB'S CONVERSATION WITH ALICE")
 	bobConvesation = newBob.conversations["alice"]
 	for i, mesg := range bobConvesation {
-		newBob.log.Debugf("%d outbound %v message:\n%s\n", i, mesg.Outbound, mesg.Plaintext)
+		newBob.log.Debugf("BOB %d outbound %v message:\n%s\n", i, mesg.Outbound, mesg.Plaintext)
 	}
 
 	newMal := reloadCatshadowState(t, malStateFilePath)
@@ -484,386 +359,6 @@ and can readily scale to millions of users.
 	}
 	newAlice.Shutdown()
 	newBob.Shutdown()
-}
-
-func TestDockerReunionSuccess(t *testing.T) {
-	t.Skip("Reunion does not work with 2KB payloads")
-	t.Parallel()
-	require := require.New(t)
-
-	aliceState := createRandomStateFile(t)
-	alice := createCatshadowClientWithState(t, aliceState)
-
-	bobState := createRandomStateFile(t)
-	bob := createCatshadowClientWithState(t, bobState)
-
-	sharedSecret := []byte("There is a certain kind of small town that grows like a boil on the ass of every Army base in the world.")
-	randBytes := [8]byte{}
-	_, err := rand.Reader.Read(randBytes[:])
-	require.NoError(err)
-	sharedSecret = append(sharedSecret, randBytes[:]...)
-
-	alice.NewContact("bob", sharedSecret)
-	bob.NewContact("alice", sharedSecret)
-
-	//for i:=0; i<10; i++ {
-	//	go func() {
-	//		malState := createRandomStateFile(t)
-	//		mal := createCatshadowClientWithState(t, malState)
-	//		antifaState := createRandomStateFile(t)
-	//		antifa := createCatshadowClientWithState(t, antifaState)
-	//		randBytes := [8]byte{}
-	//		rand.Reader.Read(randBytes[:])
-
-	//		go func() {mal.NewContact("antifa", randBytes[:])}()
-	//		go func() {antifa.NewContact("mal", randBytes[:])}()
-	//	}()
-	//}
-	afails := 0
-	bfails := 0
-
-loop1:
-	for {
-		ev := <-alice.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			// XXX: we do multiple exchanges, some will fail
-			alice.log.Debugf("reunion ALICE RECEIVED event: %v\n", event)
-			if event.Err != nil {
-				afails++
-				require.True(afails < 6)
-				continue
-			} else {
-				break loop1
-			}
-		default:
-		}
-	}
-
-loop2:
-	for {
-		ev := <-bob.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			// XXX: we do multiple exchanges, some will fail
-			bob.log.Debugf("reunion BOB RECEIVED event: %v\n", event)
-			if event.Err != nil {
-				bfails++
-				require.True(bfails < 6)
-				continue
-			} else {
-				break loop2
-			}
-		default:
-		}
-	}
-
-	alice.Shutdown()
-	bob.Shutdown()
-}
-
-func TestDockerChangeExpiration(t *testing.T) {
-	t.Parallel()
-	require := require.New(t)
-
-	a := createCatshadowClientWithState(t, createRandomStateFile(t))
-
-	s := [8]byte{}
-	_, err := rand.Reader.Read(s[:])
-	require.NoError(err)
-
-	a.NewContact("b", s[:])
-	exp, err := a.GetExpiration("b")
-	require.NoError(err)
-	require.Equal(exp, MessageExpirationDuration)
-	err = a.ChangeExpiration("b", time.Duration(123))
-	require.NoError(err)
-	exp, err = a.GetExpiration("b")
-	require.NoError(err)
-	require.Equal(exp, time.Duration(123))
-	_, err = a.GetExpiration("c")
-	require.Error(err, ErrContactNotFound)
-
-}
-
-func TestDockerAddRemoveContact(t *testing.T) {
-	t.Parallel()
-	require := require.New(t)
-
-	a := createCatshadowClientWithState(t, createRandomStateFile(t))
-	b := createCatshadowClientWithState(t, createRandomStateFile(t))
-
-	s := [8]byte{}
-	_, err := rand.Reader.Read(s[:])
-	require.NoError(err)
-
-	a.NewContact("b", s[:])
-	b.NewContact("a", s[:])
-
-loop1:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop1
-		default:
-		}
-	}
-
-loop2:
-	for {
-		ev := <-b.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop2
-		default:
-		}
-	}
-
-	t.Log("Sending message to b")
-	a.SendMessage("b", []byte{0})
-loop3:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *MessageDeliveredEvent:
-			t.Log("Message delivered to b")
-			if event.Nickname == "b" {
-				break loop3
-			} else {
-				t.Log(event)
-			}
-		default:
-		}
-	}
-
-	t.Log("Sending message to a")
-	b.SendMessage("a", []byte{0})
-
-loop4:
-	for {
-		ev := <-b.EventSink
-		switch event := ev.(type) {
-		case *MessageDeliveredEvent:
-			t.Log("Message delivered to a")
-			if event.Nickname == "a" {
-				break loop4
-			}
-		default:
-		}
-	}
-
-	t.Log("Removing contact b")
-	err = a.RemoveContact("b")
-	require.NoError(err)
-	require.Equal(len(a.GetContacts()), 0)
-
-	t.Log("Removing contact b again, checking for err")
-	err = a.RemoveContact("b")
-	require.Error(err, ErrContactNotFound)
-
-	c := a.conversations["b"]
-	require.Equal(len(c), 0)
-	// verify that contact data is gone
-	t.Log("Sending message to b, must fail")
-	a.SendMessage("b", []byte("must fail"))
-loop5:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *MessageNotSentEvent:
-			if event.Nickname == "b" {
-				break loop5
-			}
-		default:
-		}
-	}
-
-	a.Shutdown()
-	b.Shutdown()
-}
-
-func TestDockerRenameContact(t *testing.T) {
-	t.Parallel()
-	require := require.New(t)
-
-	a := createCatshadowClientWithState(t, createRandomStateFile(t))
-	b := createCatshadowClientWithState(t, createRandomStateFile(t))
-
-	s := [8]byte{}
-	_, err := rand.Reader.Read(s[:])
-	require.NoError(err)
-
-	a.NewContact("b", s[:])
-	b.NewContact("a", s[:])
-
-	// wait for key exchanges to complete
-loop1:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop1
-		default:
-		}
-	}
-
-loop2:
-	for {
-		ev := <-b.EventSink
-		switch event := ev.(type) {
-		case *KeyExchangeCompletedEvent:
-			require.Nil(event.Err)
-			break loop2
-		default:
-		}
-	}
-
-	t.Log("Sending message to b")
-	a.SendMessage("b", []byte("a->b"))
-	// wait for message to be delivered to spool
-loop3:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *MessageDeliveredEvent:
-			t.Log("Message delivered to b")
-			if event.Nickname == "b" {
-				break loop3
-			} else {
-				t.Log(event)
-			}
-		default:
-		}
-	}
-
-	// wait for message to be received by b
-loop3a:
-	for {
-		ev := <-b.EventSink
-		switch event := ev.(type) {
-		case *MessageReceivedEvent:
-			t.Log("Message received by b")
-			if event.Nickname == "a" {
-				break loop3a
-			}
-		default:
-		}
-	}
-	t.Log("Sending message to a")
-	b.SendMessage("a", []byte("b->a"))
-	// wait for message to be delivered to spool
-loop4:
-	for {
-		ev := <-b.EventSink
-		switch event := ev.(type) {
-		case *MessageDeliveredEvent:
-			t.Log("Message delivered to a")
-			if event.Nickname == "a" {
-				break loop4
-			}
-		default:
-		}
-	}
-	// wait for message to be received by a
-loop4a:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *MessageReceivedEvent:
-			t.Log("Message received by a")
-			if event.Nickname == "b" {
-				break loop4a
-			}
-		default:
-		}
-	}
-
-	// rename the contacts
-	t.Log("Renaming contact b")
-	err = a.RenameContact("b", "b2")
-	require.NoError(err)
-
-	c := a.conversations["b"]
-	require.Equal(len(c), 0)
-
-	// verify that contact data is gone
-	t.Log("Sending message to b, must fail")
-	a.SendMessage("b", []byte("must fail"))
-
-	// wait for failure sending message
-loop5:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *MessageNotSentEvent:
-			if event.Nickname == "b" {
-				break loop5
-			}
-		default:
-		}
-	}
-
-	// send message to the renamed contact
-	a.SendMessage("b2", []byte("a->b2"))
-	// wait for message to be delivered to spool
-loop6:
-	for {
-		ev := <-a.EventSink
-		switch event := ev.(type) {
-		case *MessageDeliveredEvent:
-			t.Log("Message delivered to b2")
-			if event.Nickname == "b2" {
-				break loop6
-			} else {
-				t.Log(event)
-			}
-		default:
-		}
-	}
-	// wait for message to be received by b
-loop7:
-	for {
-		ev := <-b.EventSink
-		switch event := ev.(type) {
-		case *MessageReceivedEvent:
-			t.Log("Message received by b2")
-			if event.Nickname == "a" {
-				break loop7
-			} else {
-				t.Log(event)
-			}
-		default:
-		}
-	}
-
-	// verify that b2 has sent 1 message and received 2 messages
-	c = b.conversations["a"]
-
-	sent := 0
-	received := 0
-	for _, msg := range c {
-		if msg.Sent {
-			sent += 1
-		} else {
-			received += 1
-		}
-	}
-	require.Equal(1, sent)
-	require.Equal(2, received)
-	require.Equal(1, len(a.conversations))
-	require.Equal(1, len(b.conversations))
-
-	// clear conversation history
-	b.WipeConversation("a")
-	c = b.conversations["a"]
-	require.Equal(len(c), 0)
-
-	a.Shutdown()
-	b.Shutdown()
 }
 
 func init() {

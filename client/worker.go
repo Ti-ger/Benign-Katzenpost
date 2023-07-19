@@ -21,12 +21,13 @@ import (
 	"math"
 	"time"
 
+	mrand "math/rand"
+
 	"github.com/katzenpost/katzenpost/client/constants"
 	cConstants "github.com/katzenpost/katzenpost/client/constants"
 	"github.com/katzenpost/katzenpost/client/utils"
 	"github.com/katzenpost/katzenpost/core/crypto/rand"
 	"github.com/katzenpost/katzenpost/core/pki"
-	mrand "math/rand"
 )
 
 type workerOp interface{}
@@ -101,13 +102,14 @@ func (s *Session) worker() {
 
 	isConnected := false
 	mustResetAllTimers := false
+
 	for {
 		var lambdaPFired bool
 		var lambdaLFired bool
 		var lambdaDFired bool
 		var loopSvc *utils.ServiceDescriptor
 		var qo workerOp
-
+		s.cfg.Debug.DisableDecoyTraffic = false
 		select {
 		case <-s.HaltCh():
 			s.log.Debugf("Session worker terminating gracefully.")
@@ -160,10 +162,6 @@ func (s *Session) worker() {
 				}
 				if lambdaPFired {
 					s.sendFromQueueOrDecoy(loopSvc)
-				} else if lambdaLFired && !s.cfg.Debug.DisableDecoyTraffic {
-					s.sendLoopDecoy(loopSvc)
-				} else if lambdaDFired && !s.cfg.Debug.DisableDecoyTraffic {
-					s.sendDropDecoy(loopSvc)
 				}
 			}
 		}
@@ -217,8 +215,6 @@ func (s *Session) sendFromQueueOrDecoy(loopSvc *utils.ServiceDescriptor) {
 	_, err := s.egressQueue.Peek()
 	if err == nil {
 		s.sendNext()
-	} else if !s.cfg.Debug.DisableDecoyTraffic {
-		s.sendDropDecoy(loopSvc)
 	}
 }
 

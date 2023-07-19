@@ -445,6 +445,7 @@ func (c *Client) doGetSpoolProviders() interface{} {
 // destined to this Client. This method blocks until the reply from
 // the remote spool service is received or the round trip timeout is reached.
 func (c *Client) CreateRemoteSpoolOn(provider string) error {
+	c.log.Debugf("Created Remote spool on: %v", provider)
 	createSpoolOp := &opCreateSpool{
 		provider:     provider,
 		responseChan: make(chan error, 1),
@@ -952,6 +953,7 @@ func (c *Client) doSendMessage(convoMesgID MessageID, nickname string, message [
 	item := &queuedSpoolCommand{Receiver: contact.spoolWriteDescriptor.Receiver,
 		Provider: contact.spoolWriteDescriptor.Provider,
 		Command:  appendCmd, ID: convoMesgID}
+	c.log.Debugf("Queued Message for %v @ SPOOL WRITE: provider: %v, RECEIVER: %v!", nickname, contact.spoolWriteDescriptor.Provider, contact.spoolWriteDescriptor.Receiver)
 	if _, err := contact.outbound.Peek(); err == ErrQueueEmpty {
 		// no messages already queued, so call sendMessage immediately
 		c.connMutex.RLock()

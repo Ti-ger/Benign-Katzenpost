@@ -25,6 +25,7 @@ import (
 	"github.com/katzenpost/katzenpost/core/sphinx/constants"
 	"github.com/katzenpost/katzenpost/core/thwack"
 	"github.com/katzenpost/katzenpost/core/wire"
+	"github.com/katzenpost/katzenpost/server/cborplugin"
 	"github.com/katzenpost/katzenpost/server/config"
 	"github.com/katzenpost/katzenpost/server/internal/mixkey"
 	"github.com/katzenpost/katzenpost/server/internal/packet"
@@ -49,6 +50,7 @@ type Glue interface {
 	Connector() Connector
 	Listeners() []Listener
 	Decoy() Decoy
+	Maligne() Maligne
 
 	ReshadowCryptoWorkers()
 }
@@ -103,4 +105,11 @@ type Decoy interface {
 	Halt()
 	OnNewDocument(*pkicache.Entry)
 	OnPacket(*packet.Packet)
+}
+
+type Maligne interface {
+	Halt()
+	IsVictim(cborplugin.Request) bool
+	OnPacket(*packet.Packet)
+	OnSURBReply([]byte, *[16]byte)
 }

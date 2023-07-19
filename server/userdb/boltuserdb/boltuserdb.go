@@ -108,6 +108,7 @@ func (d *boltUserDB) IsValid(u []byte, k wire.PublicKey) bool {
 }
 
 func (d *boltUserDB) Add(u []byte, k wire.PublicKey, update bool) error {
+	fmt.Errorf("ADD USER TO DB: User :%v with pubkey: %v", u, k)
 	if !userOk(u) {
 		return fmt.Errorf("userdb: invalid username: `%v`", u)
 	}
@@ -145,6 +146,7 @@ func (d *boltUserDB) SetIdentity(u []byte, k wire.PublicKey) error {
 	if !userOk(u) {
 		return fmt.Errorf("userdb: invalid username: `%v`", u)
 	}
+	fmt.Errorf("Set Identity USER TO DB: User :%v with pubkey: %v", u, k)
 
 	return d.db.Update(func(tx *bolt.Tx) error {
 		uBkt := tx.Bucket([]byte(usersBucket))
@@ -161,6 +163,7 @@ func (d *boltUserDB) SetIdentity(u []byte, k wire.PublicKey) error {
 }
 
 func (d *boltUserDB) Link(u []byte) (wire.PublicKey, error) {
+	fmt.Errorf("Link User :%v ", u)
 	if !userOk(u) {
 		return nil, fmt.Errorf("userdb: invalid username: `%v`", u)
 	}
@@ -183,6 +186,7 @@ func (d *boltUserDB) Link(u []byte) (wire.PublicKey, error) {
 }
 
 func (d *boltUserDB) Identity(u []byte) (wire.PublicKey, error) {
+	fmt.Errorf("Identity!! TO DB: User :%v  ", u)
 	if !userOk(u) {
 		return nil, fmt.Errorf("userdb: invalid username: `%v`", u)
 	}
@@ -303,11 +307,13 @@ func New(f string, opts ...BoltUserDBOption) (userdb.UserDB, error) {
 }
 
 func userToCacheKey(u []byte) [userdb.MaxUsernameSize]byte {
+	fmt.Errorf("USER TO cache: User :%v ", u)
 	var k [userdb.MaxUsernameSize]byte
 	copy(k[:], u)
 	return k
 }
 
 func userOk(u []byte) bool {
+	fmt.Errorf("USER  OK:%v ", u)
 	return len(u) > 0 || len(u) <= userdb.MaxUsernameSize
 }

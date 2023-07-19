@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	ratchet "github.com/katzenpost/katzenpost/doubleratchet"
 	cConstants "github.com/katzenpost/katzenpost/client/constants"
 	"github.com/katzenpost/katzenpost/core/crypto/rand"
+	ratchet "github.com/katzenpost/katzenpost/doubleratchet"
 	memspoolClient "github.com/katzenpost/katzenpost/memspool/client"
 )
 
@@ -159,9 +159,15 @@ func (c *Contact) ID() uint64 {
 	return c.id
 }
 
+// ID returns the Contact ID.
+func (c *Contact) GetProvider() string {
+	return c.spoolWriteDescriptor.Provider
+}
+
 // MarshalBinary does what you expect and returns
 // a serialized Contact.
 func (c *Contact) MarshalBinary() ([]byte, error) {
+
 	// obtain the ratchet mutex first...
 	c.ratchetMutex.Lock()
 	ratchetBlob, err := c.ratchet.Save()

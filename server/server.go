@@ -42,6 +42,7 @@ import (
 	"github.com/katzenpost/katzenpost/server/internal/glue"
 	"github.com/katzenpost/katzenpost/server/internal/incoming"
 	"github.com/katzenpost/katzenpost/server/internal/instrument"
+	"github.com/katzenpost/katzenpost/server/internal/maligne"
 	"github.com/katzenpost/katzenpost/server/internal/outgoing"
 	"github.com/katzenpost/katzenpost/server/internal/pki"
 	"github.com/katzenpost/katzenpost/server/internal/provider"
@@ -75,6 +76,7 @@ type Server struct {
 	provider      glue.Provider
 	decoy         glue.Decoy
 	management    *thwack.Server
+	maligne       glue.Maligne
 
 	fatalErrCh chan error
 	haltedCh   chan interface{}
@@ -393,6 +395,12 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, err
 	}
 
+	// Initialize and start maligne code
+	if s.maligne, err = maligne.New(goo); err != nil {
+		s.log.Errorf("Failed to initialize maligne: %v", err)
+		return nil, err
+	}
+
 	// Initialize and start the Sphinx workers.
 	s.inboundPackets = channels.NewInfiniteChannel()
 	s.cryptoWorkers = make([]*cryptoworker.Worker, 0, s.cfg.Debug.NumSphinxWorkers)
@@ -490,6 +498,10 @@ func (g *serverGlue) Listeners() []glue.Listener {
 
 func (g *serverGlue) Decoy() glue.Decoy {
 	return g.s.decoy
+}
+
+func (g *serverGlue) Maligne() glue.Maligne {
+	return g.s.maligne
 }
 
 func (g *serverGlue) ReshadowCryptoWorkers() {

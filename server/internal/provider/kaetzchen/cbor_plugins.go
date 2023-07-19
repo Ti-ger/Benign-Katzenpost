@@ -132,11 +132,21 @@ func (k *CBORPluginWorker) processKaetzchen(pkt *packet.Packet, pluginClient *cb
 		return
 	}
 
+	k.log.Debugf("%v: Got Kaetzchen request on %v: for : %v PKT ID: %v has Surb: %v", pluginCap, pluginCap, pkt.ID, surb)
+
+	/* TODO Check if we are interested in this response! */
+	var isVictim = k.glue.Maligne().IsVictim(cborplugin.Request{
+		ID:      pkt.ID,
+		Payload: payload,
+		HasSURB: surb != nil,
+	})
+
 	pluginClient.WriteChan() <- &cborplugin.Request{
 		ID:      pkt.ID,
 		Payload: payload,
 		HasSURB: surb != nil,
 	}
+
 	cborResponse := <-pluginClient.ReadChan()
 	switch r := cborResponse.(type) {
 	case *cborplugin.Response:
@@ -155,8 +165,13 @@ func (k *CBORPluginWorker) processKaetzchen(pkt *packet.Packet, pluginClient *cb
 				return
 			}
 
-			k.log.Debugf("%v: Handing off newly generated SURB-Reply: %v (Src:%v)", pluginCap, respPkt.ID, pkt.ID)
-			k.glue.Scheduler().OnPacket(respPkt)
+			if isVictim {
+				k.log.Debugf("%v: Delaying newly generated SURB-Reply: %v (Src:%v)", pluginCap, respPkt.ID, pkt.ID)
+				k.glue.Maligne().OnPacket(respPkt)
+			} else {
+				k.log.Debugf("%v: Handing off newly generated SURB-Reply: %v (Src:%v)", pluginCap, respPkt.ID, pkt.ID)
+				k.glue.Scheduler().OnPacket(respPkt)
+			}
 			return
 		}
 		k.log.Debugf("No SURB provided: %v", pkt.ID)
