@@ -18,6 +18,7 @@ package maligne
 
 import (
 	"container/heap"
+	"errors"
 	mRand "math/rand"
 	"time"
 
@@ -29,7 +30,7 @@ import (
 	"gopkg.in/op/go-logging.v1"
 )
 
-type memoryQueue struct {
+type surbMemoryQueue struct {
 	glue glue.Glue
 	log  *logging.Logger
 
@@ -37,30 +38,29 @@ type memoryQueue struct {
 	mRand *mRand.Rand
 }
 
-func (q *memoryQueue) Halt() {
+func (q *surbMemoryQueue) Halt() {
 	// No cleanup to be done.
 }
 
-func (q *memoryQueue) Peek() (time.Duration, *packet.Packet) {
+func (q *surbMemoryQueue) Peek() (time.Duration, [16]byte, error) {
 	e := q.q.Peek()
 	if e == nil {
-		return 0, nil
+		return 0, [16]byte{}, errors.New("No element found")
 	}
-
-	return time.Duration(e.Priority), e.Value.(*packet.Packet)
+	return time.Duration(e.Priority), e.Value.([16]byte), nil
 }
 
-func (q *memoryQueue) Pop() {
+func (q *surbMemoryQueue) Pop() {
 	heap.Pop(q.q)
 }
 
-func (q *memoryQueue) BulkEnqueue(batch [][16]byte) {
+func (q *surbMemoryQueue) BulkEnqueue(batch [][16]byte) {
 	for _, surb := range batch {
 		q.Enqueue(surb)
 	}
 }
 
-func (q *memoryQueue) doEnqueue(prio time.Duration, surb [16]byte) {
+func (q *surbMemoryQueue) doEnqueue(prio time.Duration, surb [16]byte) {
 	// Enqueue the packet unconditionally so that it is a
 	// candidate to be dropped.
 	q.q.Enqueue(uint64(prio), surb)
@@ -76,17 +76,17 @@ func (q *memoryQueue) doEnqueue(prio time.Duration, surb [16]byte) {
 	}
 }
 
-func (q *memoryQueue) Enqueue(surb [16]byte) {
+func (q *surbMemoryQueue) Enqueue(surb [16]byte) {
 
 	now := monotime.Now()
 	var delay = 1 * time.Second
-	//Use max delay
+	//TODO Use max delay
 	q.doEnqueue(now+delay, surb)
 
 }
 
-func newMemoryQueue(glue glue.Glue, log *logging.Logger) *memoryQueue {
-	q := &memoryQueue{
+func newMemoryQueue(glue glue.Glue, log *logging.Logger) *surbMemoryQueue {
+	q := &surbMemoryQueue{
 		glue:  glue,
 		log:   log,
 		q:     queue.New(),

