@@ -20,7 +20,7 @@ mix network components as part of the core Katzenpost developer work flow.
 
 1. Run a test network
 ```
-   git clone git@github.com:Ti-ger/Benign-Katzenpost.git
+   git clone https://github.com/Ti-ger/Benign-Katzenpost.git
    cd Benign-Katzenpost
    cd docker
    make run-voting-testnet
