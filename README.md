@@ -19,13 +19,12 @@ mix network components as part of the core Katzenpost developer work flow.
 * GNU Make
 
 1. Run a test network
-::
-
+```
    git clone git@github.com:Ti-ger/Benign-Katzenpost.git
    cd Benign-Katzenpost
    cd docker
    make run-voting-testnet
-
+```
 Note that if you do not have podman and your system configuration requires you
 to ``sudo`` to use docker, you will need to prefix all of the ``make`` commands
 in this directory with ``sudo``. If you have both podman and docker installed,
@@ -43,7 +42,7 @@ podman system service -t 0 $DOCKER_HOST &
 At this point, you should have a locally running network. You can hit ctrl-C to
 stop it, or use another terminal to observe the logs with ``tail -F voting_mixnet/*/*log``.
 
-You can now observe the status of the mix net
+2. You can now observe the status of the mix net
 ```
   make status
 ```
@@ -54,16 +53,17 @@ Once the mix net has reached a consensus:
 
 we can mount the attack.
 
-We want to observe the logs of our corrupted providers, so open two new shells:
+3. We want to observe the logs of our corrupted providers, so open two new shells:
 ```
   Benign-Katzenpost/docker/voting_mixnet$ tail -f provider1/katzenpost.log | strings | grep maligne
   Benign-Katzenpost/docker/voting_mixnet$ tail -f provider2/katzenpost.log | strings | grep maligne
 ```
 
-We will now use the catshadow test case to simulate users. Open yet another shell:
+4. We will now use the catshadow test case to simulate users. Open yet another shell:
 
-
+```
   Benign-Katzenpost/catshadow$ make dockerdockertest
+```
 
 You should now be able to observe that one provider is collecting SURBS:
 > 14:52:58.074 DEBU maligne: Delaying pkt: 144  
