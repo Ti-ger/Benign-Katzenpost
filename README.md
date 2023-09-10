@@ -3,7 +3,7 @@ Delaying SURBs in Katzenpost
 ==============================
 
 This is a proof of concept implementation of the "Delaying SURBs" attack. The majority of the source code is forked
-form Katzenpost, as well as most of this guide. 
+form Katzenpost, as well as most of this guide. Except for some hooks the majority of our code resides in: `server/internal/maligne`
 
 First follow the instructions to run Katzenpost:
 
